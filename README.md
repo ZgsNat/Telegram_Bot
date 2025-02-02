@@ -1,7 +1,7 @@
 # Telegram_Bot
 # 🌸 ZgsNat_Bot - Telegram Expense Management Assistant 🌸
-
-![Bot Banner](https://via.placeholder.com/800x200?text=ZgsNat_Bot+-+Love+and+Expense+Manager)  
+<!-- 
+![Bot Banner](https://via.placeholder.com/800x200?text=ZgsNat_Bot+-+Love+and+Expense+Manager)   -->
 
 > 💖 **ZgsNat_Bot** is designed to help you and your loved one manage expenses easily and joyfully. Turn expense tracking into a sweet experience instead of a headache with dry numbers! 💸
 
