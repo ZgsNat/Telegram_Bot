@@ -17,7 +17,14 @@ def main():
     app.add_error_handler(error_handler_instance)
 
     logger.info(f"Bot @{config.BOT_USERNAME} is running!")
-    app.run_polling()
+    # Webhook config for Railway
+    # WEBHOOK_URL = f"https://{config.SERVER_DOMAIN}/webhook/{config.TOKEN}"
+    # app.run_webhook(
+    #     listen="0.0.0.0",
+    #     port=int(config.SERVER_PORT),
+    #     webhook_url=WEBHOOK_URL,
+    # )
+    app.run_polling(poll_interval=5)
 
 if __name__ == "__main__":
     main()
