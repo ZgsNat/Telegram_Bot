@@ -1,6 +1,7 @@
 import importlib
 import os
-from telegram.ext import Application
+from venv import logger
+from telegram.ext import Application, BaseHandler
 
 def load_handlers(app: Application, handler_paths: list):
     for path in handler_paths:
@@ -12,4 +13,7 @@ def load_handlers(app: Application, handler_paths: list):
 
                 if hasattr(module, "get_handler"):
                     handler = module.get_handler()
-                    app.add_handler(handler)
+                    if isinstance(handler, BaseHandler):
+                        app.add_handler(handler)
+                    else:
+                        logger.error(f"Handler {handler} is not an instance of BaseHandler")
