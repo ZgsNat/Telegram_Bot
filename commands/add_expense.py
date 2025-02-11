@@ -12,5 +12,5 @@ async def add_expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     add_expense_entry(amount, description)
     await update.message.reply_text(f"Added expense: {amount} for {description}")
 
-def get_handler():
+def get_handlers():
     return CommandHandler("add_expense", add_expense_command)

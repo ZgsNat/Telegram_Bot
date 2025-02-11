@@ -11,9 +11,13 @@ def load_handlers(app: Application, handler_paths: list):
                 module_path = f"{path}.{file_name[:-3]}"
                 module = importlib.import_module(module_path)
 
-                if hasattr(module, "get_handler"):
-                    handler = module.get_handler()
-                    if isinstance(handler, BaseHandler):
-                        app.add_handler(handler)
+                if hasattr(module, "get_handlers"):
+                    handlers = module.get_handlers()
+                    if isinstance(handlers, BaseHandler):  # Một handler duy nhất
+                        app.add_handler(handlers)
+                    elif isinstance(handlers, list):  # Danh sách handlers
+                        for handler in handlers:
+                            if isinstance(handler, BaseHandler):
+                                app.add_handler(handler)
                     else:
-                        logger.error(f"Handler {handler} is not an instance of BaseHandler")
+                        logger.error(f"{module_path}.get_handlers() must return a handler or a list of handlers.")
