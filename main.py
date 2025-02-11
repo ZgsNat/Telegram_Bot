@@ -20,7 +20,7 @@ def main():
     # Add help handler
     app.add_handler(get_help_handlers())
     
-    logger.info(f"Bot @{config.BOT_USERNAME} is running!")
+    logger.info(f"Bot {config.BOT_USERNAME} is running!")
     # Webhook config for Railway
     # WEBHOOK_URL = f"https://{config.SERVER_DOMAIN}/webhook/{config.TOKEN}"
     # app.run_webhook(

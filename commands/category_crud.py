@@ -20,7 +20,10 @@ async def add_category_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def list_categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List all categories."""
-    category_list = "\n".join(CATEGORIES) if CATEGORIES else "No categories available."
+    if CATEGORIES:
+        category_list = "\n".join(f"{i+1}. {category}" for i, category in enumerate(CATEGORIES))
+    else:
+        category_list = "No categories available."
     await update.message.reply_text(f"Current list of categories:\n{category_list}")
 
 async def delete_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,8 +62,8 @@ async def update_category_command(update: Update, context: ContextTypes.DEFAULT_
 
 def get_handlers():
     return [
-        CommandHandler("add_category", add_category_command),
-        CommandHandler("list_categories", list_categories_command),
-        CommandHandler("delete_category", delete_category_command),
-        CommandHandler("update_category", update_category_command),
+        CommandHandler("add_cate", add_category_command),
+        CommandHandler("list_cate", list_categories_command),
+        CommandHandler("delete_cate", delete_category_command),
+        CommandHandler("update_cate", update_category_command),
     ]
