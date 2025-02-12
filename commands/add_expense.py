@@ -10,7 +10,7 @@ async def add_expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     amount = context.args[0]
     description = " ".join(context.args[1:])
-    add_expense_entry(amount, description)
+    # add_expense_entry(amount, description)
     await update.message.reply_text(f"Added expense: {amount} for {description}")
 
 def get_handlers():
