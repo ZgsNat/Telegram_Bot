@@ -1,6 +1,5 @@
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
-from services.expense_service import add_expense_entry
 
 async def add_expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Add a new expense"""
