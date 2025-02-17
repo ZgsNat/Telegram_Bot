@@ -18,7 +18,7 @@ def main():
     app.add_error_handler(error_handler_instance)
 
     # Add help handler
-    app.add_handler(get_help_handlers())
+    # app.add_handler(get_help_handlers())
     
     logger.info(f"Bot {config.BOT_USERNAME} is running!")
     # Webhook config for Railway

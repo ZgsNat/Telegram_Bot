@@ -6,10 +6,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 
 # Kết nối với Google Sheets API
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 CREDS = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 client = gspread.authorize(CREDS)
-DB_FILE = "database/user_sheets.json"  # Đặt file vào thư mục `database/`
+DB_FILE = "user_sheets.json"
 
 def load_user_sheets():
     """Tải danh sách user_id ↔ sheet_id từ file JSON"""
@@ -20,7 +23,9 @@ def load_user_sheets():
 
 def save_user_sheets(data):
     """Lưu danh sách user_id ↔ sheet_id vào file JSON"""
-    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)  # Đảm bảo thư mục tồn tại
+    directory = os.path.dirname(DB_FILE)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)  # Đảm bảo thư mục tồn tại
     with open(DB_FILE, "w") as file:
         json.dump(data, file, indent=4)
 
@@ -64,13 +69,27 @@ def get_worksheet(user_id):
         return sheet.worksheet("Categories")
     except gspread.exceptions.WorksheetNotFound:
         return sheet.add_worksheet(title="Categories", rows=100, cols=2)
+    
+def list_permissions(sheet_id):
+    """Liệt kê các email có quyền chỉnh sửa Google Sheet."""
+    client = get_google_client()
+    sheet = client.open_by_key(sheet_id)
+    permissions = sheet.list_permissions()
+    return [perm['emailAddress'] for perm in permissions if 'emailAddress' in perm]
 
-async def send_google_sheet(update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
-    user_email = update.message.from_user.username  # Sử dụng username làm tên file
+def delete_email_permission(sheet_id, user_email):
+    """Xóa quyền chỉnh sửa của email khỏi Google Sheet."""
+    client = get_google_client()
+    sheet = client.open_by_key(sheet_id)
+    permissions = sheet.list_permissions()
+    for perm in permissions:
+        if perm.get('emailAddress') == user_email:
+            sheet.remove_permission(perm['id'])
+            return True
+    return False
 
-    # Tạo Google Sheet nếu chưa có
-    sheet_id = create_user_sheet(user_id, user_email)
+async def send_google_sheet(update: Update, context: CallbackContext, sheet_id: str, user_email: str):
+    """Send Google Sheet link to the user"""
     sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}"
 
     # Mở Google Sheet và chia sẻ quyền chỉnh sửa
@@ -83,4 +102,6 @@ async def send_google_sheet(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # Gửi tin nhắn với nút bấm
-    await update.message.reply_text("📝 Click nút dưới đây để mở Google Sheet của bạn:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        f"email của bạn đã được thêm! \n",
+        f"📝 Click nút dưới đây để mở Google Sheet của bạn:", reply_markup=reply_markup)

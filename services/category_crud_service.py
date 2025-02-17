@@ -5,16 +5,14 @@ from database.google_sheets import get_worksheet
 CATEGORY_SHEET_NAME = "Categories"
 
 def get_categories(user_id):
-    """Lấy danh sách categories từ Google Sheets."""
+    """Lấy danh sách categories từ worksheet"""
     worksheet = get_worksheet(user_id)
     if not worksheet:
-        return []
+        return []  # Trả về danh sách rỗng nếu không có worksheet
 
-    try:
-        data = worksheet.get_all_records()
-        return [row["Category"] for row in data if "Category" in row]
-    except:
-        return []
+    # Lấy tất cả các giá trị từ cột đầu tiên
+    categories = worksheet.col_values(1)
+    return categories
 
 def add_category(user_id, category_name):
     """Thêm category mới vào Google Sheets."""
@@ -38,7 +36,7 @@ def delete_category(user_id, category_name):
     data = worksheet.get_all_values()
     for idx, row in enumerate(data, start=1):
         if row and row[0] == category_name:
-            worksheet.delete_rows(idx + 1)
+            worksheet.delete_rows(idx)
             return f"Đã xóa category: {category_name}"
 
     return "Category không tồn tại!"
@@ -52,7 +50,7 @@ def update_category(user_id, old_name, new_name):
     data = worksheet.get_all_values()
     for idx, row in enumerate(data, start=1):
         if row and row[0] == old_name:
-            worksheet.update_cell(idx + 1, 1, new_name)
+            worksheet.update_cell(idx, 1, new_name)
             return f"Đã cập nhật category: {old_name} → {new_name}"
 
     return "Category không tồn tại!"
