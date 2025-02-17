@@ -34,7 +34,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Escape dấu `_` để Telegram không hiểu là Markdown syntax
     help_text = help_text.replace("_", "\\_")  # Escape dấu gạch dưới trong lệnh
 
-    # Gửi phản hồi cho người dùng
     await update.message.reply_text(help_text, parse_mode="MarkdownV2")
 def get_handlers():
     return CommandHandler("help", help_command)
