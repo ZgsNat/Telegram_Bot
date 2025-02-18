@@ -3,9 +3,9 @@ from telegram.ext import CommandHandler, Application, ContextTypes, CallbackCont
 from services.category_crud_service import add_category, get_categories, delete_category, update_category
 
 async def list_categories(update: Update, context: CallbackContext):
-    """Liệt kê các categories"""
+    """Liệt kê các categories (async)"""
     user_id = update.message.from_user.id
-    categories = get_categories(user_id)
+    categories = await get_categories(user_id)  
     if not categories:
         await update.message.reply_text("Chưa có categories nào.")
     else:
@@ -13,29 +13,29 @@ async def list_categories(update: Update, context: CallbackContext):
         await update.message.reply_text(f"📂 Danh sách Categories:\n{categories_text}")
 
 async def add_category_handler(update: Update, context: CallbackContext):
-    """Thêm category mới"""
+    """Thêm category mới (async)"""
     user_id = update.message.from_user.id
     category_name = " ".join(context.args)
     if not category_name:
         await update.message.reply_text("Vui lòng nhập tên category.")
         return
 
-    result = add_category(user_id, category_name)
+    result = await add_category(user_id, category_name)  
     await update.message.reply_text(result)
 
 async def delete_category_handler(update: Update, context: CallbackContext):
-    """Xóa category"""
+    """Xóa category (async)"""
     user_id = update.message.from_user.id
     category_name = " ".join(context.args)
     if not category_name:
         await update.message.reply_text("Vui lòng nhập tên category để xóa.")
         return
 
-    result = delete_category(user_id, category_name)
+    result = await delete_category(user_id, category_name)
     await update.message.reply_text(result)
 
 async def update_category_handler(update: Update, context: CallbackContext):
-    """Cập nhật tên category"""
+    """Cập nhật tên category (async)"""
     user_id = update.message.from_user.id
     args = " ".join(context.args).split(", ")
     if len(args) < 2:
@@ -43,8 +43,9 @@ async def update_category_handler(update: Update, context: CallbackContext):
         return
 
     old_name, new_name = args[0], args[1]
-    result = update_category(user_id, old_name, new_name)
+    result = await update_category(user_id, old_name, new_name)
     await update.message.reply_text(result)
+
 
 def get_handlers():
     return [
