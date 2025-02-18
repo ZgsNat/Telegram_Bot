@@ -5,7 +5,7 @@ from telegram.ext import CommandHandler, ContextTypes, Application
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Hiển thị danh sách lệnh theo nhóm."""
     category_map = {
-        'User': ['start', 'help'],
+        'Default Commands': ['start', 'help'],
         'Categories': ['add_cate', 'delete_cate', 'update_cate', 'list_cate'],
         'Google Sheets': ['apply_email', 'delete_email', 'list_emails'],
         'Khác': []
