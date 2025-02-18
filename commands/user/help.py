@@ -8,7 +8,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'User': ['start', 'help'],
         'Categories': ['add_cate', 'delete_cate', 'update_cate', 'list_cate'],
         'Google Sheets': ['apply_email', 'delete_email', 'list_emails'],
-        'Khác': ['add_expense']
+        'Khác': []
     }
 
     categories = defaultdict(list)

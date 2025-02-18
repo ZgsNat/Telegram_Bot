@@ -20,7 +20,7 @@ async def save_user_sheet(user_id, sheet_id):
         json.dump(user_sheets, file)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command - Gửi Google Sheet bằng nút"""
+    """Bắt đầu cuộc trò chuyện với bot"""
     user_id = str(update.message.from_user.id)
     username = update.message.from_user.username or f"user_{user_id}"
 

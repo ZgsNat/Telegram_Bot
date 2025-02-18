@@ -46,17 +46,38 @@ async def get_google_client():
     return await agcm.authorize()
 
 async def create_user_sheet(user_id, username="User"):
-    """Tạo Google Sheet mới nếu chưa có"""
+    """Tạo Google Sheet mới nếu chưa có, kèm 12 worksheet cho các tháng."""
     user_sheets = await load_user_sheets()
 
-    if str(user_id) in user_sheets:
-        return user_sheets[str(user_id)]  # Trả về Sheet ID nếu đã tồn tại
+    # Đặt tên Google Sheet theo định dạng: username_2025 (năm hiện tại)
+    from datetime import datetime
+    current_year = datetime.now().year
+    sheet_name = f"{username}_{current_year}"
+
+    if str(user_id) in user_sheets and user_sheets[str(user_id)].get("year") == current_year:
+        return user_sheets[str(user_id)]["sheet_id"]  # Đã tồn tại Google Sheet cho năm hiện tại
 
     client = await get_google_client()
-    sheet = await client.create(f"{username}_Expenses")  # Tạo Google Sheet mới
+    sheet = await client.create(sheet_name)  # Tạo Google Sheet mới
+
+    # Tạo 12 worksheet cho các tháng
+    months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    for month in months:
+        await sheet.add_worksheet(title=month, rows=100, cols=5)
+    
+    # Xóa worksheet mặc định ("Sheet1")
+    default_sheet = await sheet.worksheet("Sheet1")
+    await sheet.del_worksheet(default_sheet)
+
     await sheet.share(None, perm_type='anyone', role='reader')  # Cho phép mọi người xem
 
-    user_sheets[str(user_id)] = sheet.id  # Lưu user_id ↔ sheet_id
+    user_sheets[str(user_id)] = {
+        "sheet_id": sheet.id,
+        "year": current_year
+    }
     await save_user_sheets(user_sheets)
 
     return sheet.id  # Trả về Sheet ID mới tạo
@@ -91,9 +112,10 @@ async def list_permissions(sheet_id):
     return [perm['emailAddress'] for perm in permissions if 'emailAddress' in perm]
 
 async def delete_email_permission(sheet_id, user_email):
-    """Xóa quyền chỉnh sửa của email khỏi Google Sheet."""
+    """Xóa quyền chỉnh sửa của email khỏi Google Sheet (trừ Service Account)."""
     service = get_drive_service()
-    
+    service_account_email = CREDS.service_account_email  # Email service account
+
     try:
         permissions = service.permissions().list(
             fileId=sheet_id, 
@@ -101,7 +123,9 @@ async def delete_email_permission(sheet_id, user_email):
         ).execute()
 
         for perm in permissions.get('permissions', []):
-            if perm.get('emailAddress') == user_email:
+            email = perm.get('emailAddress')
+            # Không xóa nếu là service account
+            if email and email == user_email and email != service_account_email:
                 service.permissions().delete(
                     fileId=sheet_id, 
                     permissionId=perm['id']
@@ -111,6 +135,7 @@ async def delete_email_permission(sheet_id, user_email):
         print(f"Error deleting permission: {e}")
     
     return False
+
 
 async def send_google_sheet(update: Update, context: CallbackContext, sheet_id: str, user_email: str):
     """Send Google Sheet link to the user (using Google Drive API for sharing)"""
