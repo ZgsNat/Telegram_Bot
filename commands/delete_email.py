@@ -1,6 +1,6 @@
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
-from database.google_sheets import get_user_sheet, delete_email_permission
+from database.google_sheets_v2 import get_user_sheet, delete_email_permission
 
 # commands/delete_email.py
 async def delete_email_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -10,12 +10,11 @@ async def delete_email_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ Vui lòng nhập email: /delete_email <email>")
         return
 
-    sheet_id = get_user_sheet(update.message.from_user.id)
-    if sheet_id and delete_email_permission(sheet_id, user_email):
+    sheet_id = await get_user_sheet(update.message.from_user.id)  # Lấy sheet_id bất đồng bộ
+    if sheet_id and await delete_email_permission(sheet_id, user_email):  # Xóa quyền email bất đồng bộ
         await update.message.reply_text(f"✅ Đã xoá quyền của {user_email}.")
     else:
         await update.message.reply_text(f"❌ Không tìm thấy email {user_email} hoặc không có quyền.")
-
 
 def get_handlers():
     return CommandHandler("delete_email", delete_email_command)
