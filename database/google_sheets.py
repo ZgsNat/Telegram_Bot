@@ -1,18 +1,27 @@
 import gspread
+import gspread_asyncio
 from google.oauth2.service_account import Credentials
 import json
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
+from googleapiclient.discovery import build
 
 # Kết nối với Google Sheets API
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/drive.file"
 ]
 CREDS = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 client = gspread.authorize(CREDS)
 DB_FILE = "user_sheets.json"
+
+def get_drive_service():
+    """Kết nối với Google Drive API."""
+    creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    return build('drive', 'v3', credentials=creds)
+
 
 def load_user_sheets():
     """Tải danh sách user_id ↔ sheet_id từ file JSON"""
@@ -69,7 +78,7 @@ def get_worksheet(user_id):
         return sheet.worksheet("Categories")
     except gspread.exceptions.WorksheetNotFound:
         return sheet.add_worksheet(title="Categories", rows=100, cols=2)
-    
+
 def list_permissions(sheet_id):
     """Liệt kê các email có quyền chỉnh sửa Google Sheet."""
     client = get_google_client()
@@ -79,13 +88,24 @@ def list_permissions(sheet_id):
 
 def delete_email_permission(sheet_id, user_email):
     """Xóa quyền chỉnh sửa của email khỏi Google Sheet."""
-    client = get_google_client()
-    sheet = client.open_by_key(sheet_id)
-    permissions = sheet.list_permissions()
-    for perm in permissions:
-        if perm.get('emailAddress') == user_email:
-            sheet.remove_permission(perm['id'])
-            return True
+    service = get_drive_service()
+    
+    try:
+        permissions = service.permissions().list(
+            fileId=sheet_id, 
+            fields="permissions(id, emailAddress)"
+        ).execute()
+
+        for perm in permissions.get('permissions', []):
+            if perm.get('emailAddress') == user_email:
+                service.permissions().delete(
+                    fileId=sheet_id, 
+                    permissionId=perm['id']
+                ).execute()
+                return True
+    except Exception as e:
+        print(f"Error deleting permission: {e}")
+    
     return False
 
 async def send_google_sheet(update: Update, context: CallbackContext, sheet_id: str, user_email: str):
@@ -102,6 +122,4 @@ async def send_google_sheet(update: Update, context: CallbackContext, sheet_id: 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     # Gửi tin nhắn với nút bấm
-    await update.message.reply_text(
-        f"email của bạn đã được thêm! \n",
-        f"📝 Click nút dưới đây để mở Google Sheet của bạn:", reply_markup=reply_markup)
+    await update.message.reply_text(f"Email của bạn đã được thêm! \n",f"📝 Click nút dưới đây để mở Google Sheet của bạn:", reply_markup=reply_markup)

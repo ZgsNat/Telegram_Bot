@@ -31,9 +31,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for category, commands in sorted(categories.items()):
         help_text += f"\n**{category}**\n" + "\n".join(commands) + "\n"
 
-    # Escape dấu `_` để Telegram không hiểu là Markdown syntax
-    help_text = help_text.replace("_", "\\_")  # Escape dấu gạch dưới trong lệnh
+    # help_text = help_text.replace("_", "\\_").replace("-", "\\-") -> markdown v2
 
-    await update.message.reply_text(help_text, parse_mode="MarkdownV2")
+    await update.message.reply_text(help_text)
+
 def get_handlers():
     return CommandHandler("help", help_command)
