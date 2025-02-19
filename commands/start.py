@@ -1,46 +1,25 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, ContextTypes
-from database.google_sheets_v2 import create_user_sheet, get_user_sheet  # Import từ google_sheets.py
-import json
-import os
-
-USER_SHEETS_FILE = 'user_sheets.json'
-
-async def save_user_sheet(user_id, sheet_id):
-    """Save user ID and Google Sheet ID to user_sheets.json"""
-    if os.path.exists(USER_SHEETS_FILE):
-        with open(USER_SHEETS_FILE, 'r') as file:
-            user_sheets = json.load(file)
-    else:
-        user_sheets = {}
-
-    user_sheets[user_id] = sheet_id
-
-    with open(USER_SHEETS_FILE, 'w') as file:
-        json.dump(user_sheets, file)
+from database.google_sheets_v2 import get_user_sheet_for_current_year  # Sử dụng hàm mới
+from datetime import datetime
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Bắt đầu cuộc trò chuyện với bot"""
     user_id = str(update.message.from_user.id)
     username = update.message.from_user.username or f"user_{user_id}"
+    current_year = datetime.now().year
 
-    # Lấy sheet ID của người dùng bất đồng bộ
-    sheet_id = await get_user_sheet(user_id)
+    # Lấy hoặc tạo Google Sheet năm hiện tại
+    sheet_id = await get_user_sheet_for_current_year(user_id, username, update)
 
-    if not sheet_id:
-        # Tạo sheet mới nếu không có sheet ID
-        sheet_id = await create_user_sheet(user_id, username)
-        await save_user_sheet(user_id, sheet_id)
-        greeting = "Welcome to the Expense Bot!"
-    else:
-        greeting = "Welcome back to the Expense Bot!"
-
+    greeting = f"Chào mừng bạn tới chat quản lý thu chi {current_year}! 📊"
+    
     sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}"
-    keyboard = [[InlineKeyboardButton("📊 GOOGLE SHEET", url=sheet_url)]]
+    keyboard = [[InlineKeyboardButton("📊 MỞ GOOGLE SHEET", url=sheet_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        f"👋 Hello {username}! {greeting}",
+        f"👋 Hello {username}! {greeting}\n\nQuản lý thu chi của bạn cho {current_year} ở đây:",
         reply_markup=reply_markup
     )
 

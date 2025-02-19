@@ -1,10 +1,14 @@
 import gspread_asyncio
+import gspread  # ✅ Import gspread để xử lý exceptions
 from google.oauth2.service_account import Credentials
 import json
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from datetime import datetime
+
 
 # Kết nối với Google Sheets API
 SCOPES = [
@@ -25,6 +29,11 @@ def get_agcm():
     agc = gspread_asyncio.AsyncioGspreadClientManager(lambda: CREDS)
     return agc
 
+async def get_google_client():
+    """Kết nối với Google Sheets API (bất đồng bộ)"""
+    agcm = get_agcm()  # Lấy client manager bất đồng bộ
+    return await agcm.authorize()
+
 async def load_user_sheets():
     """Tải danh sách user_id ↔ sheet_id từ file JSON"""
     if os.path.exists(DB_FILE):
@@ -40,25 +49,39 @@ async def save_user_sheets(data):
     with open(DB_FILE, "w") as file:
         json.dump(data, file, indent=4)
 
-async def get_google_client():
-    """Kết nối với Google Sheets API (bất đồng bộ)"""
-    agcm = get_agcm()  # Lấy client manager bất đồng bộ
-    return await agcm.authorize()
-
-async def create_user_sheet(user_id, username="User"):
-    """Tạo Google Sheet mới nếu chưa có, kèm 12 worksheet cho các tháng."""
+async def get_user_sheet_for_current_year(user_id, username="User", update: Update = None):
+    """
+    Lấy Google Sheet ID của user cho năm hiện tại.
+    Nếu chưa có thì tạo mới.
+    """
     user_sheets = await load_user_sheets()
+    current_year = str(datetime.now().year)
 
-    # Đặt tên Google Sheet theo định dạng: username_2025 (năm hiện tại)
-    from datetime import datetime
-    current_year = datetime.now().year
-    sheet_name = f"{username}_{current_year}"
+    # Kiểm tra user đã có sheet cho năm hiện tại chưa
+    if str(user_id) in user_sheets and current_year in user_sheets[str(user_id)]:
+        return user_sheets[str(user_id)][current_year]
 
-    if str(user_id) in user_sheets and user_sheets[str(user_id)].get("year") == current_year:
-        return user_sheets[str(user_id)]["sheet_id"]  # Đã tồn tại Google Sheet cho năm hiện tại
+    # Nếu chưa có thì tạo mới
+    await update.message.reply_text("⏳ Đang tạo Google Sheet... Xin hãy chờ!")
+    sheet_id = await create_user_sheet(user_id, username, current_year)
+
+    # Lưu lại vào database
+    if str(user_id) not in user_sheets:
+        user_sheets[str(user_id)] = {}
+
+    user_sheets[str(user_id)][current_year] = sheet_id
+    await save_user_sheets(user_sheets)
+
+    return sheet_id
+
+async def create_user_sheet(user_id, username="User", year=None):
+    """Tạo Google Sheet mới nếu chưa có, kèm 12 worksheet cho các tháng."""
+    if not year:
+        year = str(datetime.now().year)
+    sheet_name = f"{username}_{year}"
 
     client = await get_google_client()
-    sheet = await client.create(sheet_name)  # Tạo Google Sheet mới
+    sheet = await client.create(sheet_name)
 
     # Tạo 12 worksheet cho các tháng
     months = [
@@ -67,20 +90,26 @@ async def create_user_sheet(user_id, username="User"):
     ]
     for month in months:
         await sheet.add_worksheet(title=month, rows=100, cols=5)
-    
+
     # Xóa worksheet mặc định ("Sheet1")
     default_sheet = await sheet.worksheet("Sheet1")
     await sheet.del_worksheet(default_sheet)
 
-    await sheet.share(None, perm_type='anyone', role='reader')  # Cho phép mọi người xem
+    # Cấp quyền READ bằng Google Drive API
+    service = get_drive_service()
+    try:
+        service.permissions().create(
+            fileId=sheet.id,
+            body={
+                "type": "anyone",
+                "role": "reader"
+            }
+        ).execute()
+    except HttpError as error:
+        print(f"❌ Lỗi khi cấp quyền READ: {error}")
 
-    user_sheets[str(user_id)] = {
-        "sheet_id": sheet.id,
-        "year": current_year
-    }
-    await save_user_sheets(user_sheets)
+    return sheet.id  # Trả về ID của Google Sheet
 
-    return sheet.id  # Trả về Sheet ID mới tạo
 
 async def get_user_sheet(user_id):
     """Lấy Google Sheet ID của user"""
@@ -89,7 +118,7 @@ async def get_user_sheet(user_id):
 
 async def get_worksheet(user_id):
     """Lấy worksheet của user"""
-    sheet_id = await get_user_sheet(user_id)
+    sheet_id = await get_user_sheet_for_current_year(user_id)
     if not sheet_id:
         return None  # User chưa có Google Sheet
 
@@ -99,7 +128,7 @@ async def get_worksheet(user_id):
     # Kiểm tra xem có worksheet "Categories" chưa, nếu chưa thì tạo mới
     try:
         return await sheet.worksheet("Categories")
-    except gspread_asyncio.exceptions.WorksheetNotFound:
+    except gspread.WorksheetNotFound:  # ✅ Đổi sang gspread.WorksheetNotFound
         return await sheet.add_worksheet(title="Categories", rows=100, cols=2)
 
 async def list_permissions(sheet_id):
