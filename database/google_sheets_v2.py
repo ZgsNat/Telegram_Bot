@@ -20,6 +20,11 @@ SCOPES = [
 ]
 CREDS = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 DB_FILE = "user_sheets.json"
+sync_client = gspread.authorize(CREDS)
+
+def get_credentials():
+    """Tải Google Service Account Credentials"""
+    return Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
 
 def get_drive_service():
     """Kết nối với Google Drive API."""
@@ -101,64 +106,124 @@ async def create_user_sheet(user_id, username="User", year=None):
     return sheet.id
 
 async def format_month_worksheet(ws, spreadsheet_id):
-    """Định dạng worksheet cho một tháng"""
-    
-    # ✅ Lấy Google Sheets client đồng bộ
-    sync_creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
-    sync_client = gspread.authorize(sync_creds)  # 👉 Dùng gspread đồng bộ
+    """Định dạng worksheet cho một tháng giống như trên ảnh"""
 
-    # ✅ Mở spreadsheet bằng client đồng bộ
+    # ✅ Mở Google Sheet và worksheet
     sheet = sync_client.open_by_key(spreadsheet_id)
-
-    # ✅ Lấy worksheet dưới dạng gspread.Worksheet (đồng bộ)
     real_ws = sheet.worksheet(ws.title)
 
-    # Định nghĩa header
-    headers = [
-        ["Ngày", "Thu", "Chi", "Loại", "Mô tả", "", 
-         "Ngày", "Tiết kiệm", "Loại", "Mô tả", "", 
-         "Mục", "Hạn mức", "Đã chi", "Còn lại"]
-    ]
+    # ✅ Xóa toàn bộ nội dung trước khi ghi
+    await ws.batch_clear(["A1:O2"])
+
+    # ✅ Ghi header chính vào các ô cần thiết
+    await ws.update("A1", [["Thu Chi"]])
+    await ws.update("G1", [["Tiết Kiệm"]])
+    await ws.update("L1", [["Hạn mức chi tiêu"]])
+
+    # ✅ Merge các ô header chính
+    merge_ranges = ["A1:E2", "G1:J2", "L1:O2"]
+    for r in merge_ranges:
+        real_ws.merge_cells(r)
     
-    # ✅ Vẫn dùng async để update nội dung
-    await ws.update('A1:O1', headers)
+    sub_headers = [["Ngày", "Thu", "Chi", "Loại", "Mô tả"],
+                   ["Ngày", "Tiết kiệm", "Loại", "Mô tả"],
+                   ["Mục", "Hạn mức", "Đã chi", "Còn lại"]]
+    sub_header_cols = ["A3:E3", "G3:J3", "L3:O3"]
+    for i, header in enumerate(sub_headers):
+        await ws.update(sub_header_cols[i], [header])
 
-    # Định dạng màu header
-    header_fmt = CellFormat(
-        backgroundColor=Color(0.5, 0.2, 0.6),  # Màu tím
-        textFormat=TextFormat(bold=True, foregroundColor=Color(1, 1, 1)),  # Chữ trắng
-        horizontalAlignment='CENTER'
+    # ✅ Định dạng tiêu đề chính (font 15, in đậm, căn giữa cả ngang & dọc)
+    main_header_fmt = CellFormat(
+        backgroundColor=Color(0.3, 0.6, 1),  # Màu xanh dương
+        textFormat=TextFormat(bold=True, fontSize=15, foregroundColor=Color(1, 1, 1)),
+        horizontalAlignment='CENTER',
+        verticalAlignment='MIDDLE'
     )
+    main_header_fmt_ranges = ["A1:E2", "G1:J2", "L1:O2"]
+    for r in main_header_fmt_ranges:
+        format_cell_range(real_ws, r, main_header_fmt)
 
-    # ✅ Dùng real_ws để format
-    format_cell_range(real_ws, "A1:O1", header_fmt)
+    # ✅ Định dạng hàng tiêu đề thứ 2 (font mặc định, căn giữa)
+    sub_header_fmt = CellFormat(
+        backgroundColor=Color(0.2, 0.2, 0.2),  # Màu xám đậm
+        textFormat=TextFormat(bold=True, foregroundColor=Color(1, 1, 1)),
+        horizontalAlignment='CENTER',
+        verticalAlignment='MIDDLE'
+    )
+    sub_header_fmt_ranges = ["A3:E3", "G3:J3", "L3:O3"]
+    for r in sub_header_fmt_ranges:
+        format_cell_range(real_ws, r, sub_header_fmt)
 
-    # Căn giữa toàn bộ dữ liệu
-    align_fmt = CellFormat(horizontalAlignment='CENTER')
-    format_cell_range(real_ws, "A:O", align_fmt)
+    # ✅ Căn giữa toàn bộ dữ liệu nhập của người dùng
+    data_align_fmt = CellFormat(
+        horizontalAlignment='CENTER',
+        verticalAlignment='MIDDLE'
+    )
+    format_cell_range(real_ws, "A:O", data_align_fmt)
 
-    # Định dạng màu cho từng loại giao dịch
-    fmt_red = CellFormat(backgroundColor=Color(1, 0.6, 0.6))  # Chi tiêu (đỏ nhạt)
-    fmt_green = CellFormat(backgroundColor=Color(0.6, 1, 0.6))  # Tiết kiệm (xanh nhạt)
+    # ✅ Khóa header (không cho chỉnh sửa hàng 1 & 2)
+    protect_range(real_ws, "A1:O3")
 
-    # Áp dụng Conditional Formatting
-    apply_conditional_format(real_ws, "C:C", "Chi tiêu", fmt_red)
-    apply_conditional_format(real_ws, "H:H", "Tiết kiệm", fmt_green)
+    # ✅ Định dạng có điều kiện (Xanh: Thu, Đỏ: Chi)
+    apply_conditional_format(real_ws, "B4:B", ">", "0", Color(0.6, 1, 0.6))  # Thu = Xanh nhạt
+    apply_conditional_format(real_ws, "C4:C", "<", "0", Color(1, 0.6, 0.6))  # Chi = Đỏ nhạt
 
     return ws
 
-def apply_conditional_format(ws, col_range, criteria, cell_format):
-    """Áp dụng định dạng có điều kiện cho một cột dựa trên tiêu chí"""
+def protect_range(ws, cell_range):
+    """Khóa phạm vi ô để tránh chỉnh sửa"""
+    sheet_id = ws.spreadsheet.id
+    body = {
+        "requests": [
+            {
+                "addProtectedRange": {
+                    "protectedRange": {
+                        "range": {
+                            "sheetId": ws.id,
+                            "startRowIndex": 0,  # Hàng 1 (tính từ 0)
+                            "endRowIndex": 2     # Hàng 2 (chặn từ hàng 1-2)
+                        },
+                        "description": "Chặn chỉnh sửa header",
+                        "warningOnly": False  # Chặn hoàn toàn, không chỉ cảnh báo
+                    }
+                }
+            }
+        ]
+    }
+
+    # ✅ Thay thế cách lấy Google Sheets API
+    # creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    service = build("sheets", "v4", credentials=CREDS)
+    
+    service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
+
+
+def apply_conditional_format(ws, col_range, condition, value, color):
+    """Áp dụng định dạng có điều kiện (bắt đầu từ dòng 3, không format header)"""
+    
+    # Chuyển đổi condition thành định dạng hợp lệ
+    condition_map = {
+        ">": "NUMBER_GREATER",
+        ">=": "NUMBER_GREATER_THAN_EQ",
+        "<": "NUMBER_LESS",
+        "<=": "NUMBER_LESS_THAN_EQ",
+        "==": "NUMBER_EQ",
+        "!=": "NUMBER_NOT_EQ"
+    }
+
+    if condition not in condition_map:
+        raise ValueError(f"Điều kiện không hợp lệ: {condition}")
+
     rules = get_conditional_format_rules(ws)
     rule = ConditionalFormatRule(
         ranges=[GridRange.from_a1_range(col_range, ws)],
         booleanRule=BooleanRule(
-            condition=BooleanCondition('TEXT_EQ', [criteria]),
-            format=cell_format
+            condition=BooleanCondition(condition_map[condition], [value]),
+            format=CellFormat(backgroundColor=color)
         )
     )
     rules.append(rule)
-    rules.save()  # ✅ Lưu lại rules vào Google Sheets
+    rules.save()  # Lưu lại rule vào Google Sheets
 
 
 async def get_worksheet(user_id):
