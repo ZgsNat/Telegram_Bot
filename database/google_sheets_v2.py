@@ -1,5 +1,7 @@
+from turtle import color
 import gspread_asyncio
 import gspread  # ✅ Import gspread để xử lý exceptions
+from gspread_formatting import *
 from google.oauth2.service_account import Credentials
 import json
 import os
@@ -75,7 +77,7 @@ async def get_user_sheet_for_current_year(user_id, username="User", update: Upda
     return sheet_id
 
 async def create_user_sheet(user_id, username="User", year=None):
-    """Tạo Google Sheet mới nếu chưa có, kèm 12 worksheet cho các tháng."""
+    """Tạo Google Sheet mới với 12 tháng, định dạng bảng ngay từ đầu."""
     if not year:
         year = str(datetime.now().year)
     sheet_name = f"{username}_{year}"
@@ -83,38 +85,81 @@ async def create_user_sheet(user_id, username="User", year=None):
     client = await get_google_client()
     sheet = await client.create(sheet_name)
 
-    # Tạo 12 worksheet cho các tháng
+    # Tạo 12 worksheet với format bảng
     months = [
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
     ]
     for month in months:
-        await sheet.add_worksheet(title=month, rows=100, cols=5)
+        ws = await sheet.add_worksheet(title=month, rows=500, cols=20)
+        await format_month_worksheet(ws, sheet.id)  # Áp dụng format luôn
 
     # Xóa worksheet mặc định ("Sheet1")
     default_sheet = await sheet.worksheet("Sheet1")
     await sheet.del_worksheet(default_sheet)
 
-    # Cấp quyền READ bằng Google Drive API
-    service = get_drive_service()
-    try:
-        service.permissions().create(
-            fileId=sheet.id,
-            body={
-                "type": "anyone",
-                "role": "reader"
-            }
-        ).execute()
-    except HttpError as error:
-        print(f"❌ Lỗi khi cấp quyền READ: {error}")
+    return sheet.id
 
-    return sheet.id  # Trả về ID của Google Sheet
+async def format_month_worksheet(ws, spreadsheet_id):
+    """Định dạng worksheet cho một tháng"""
+    
+    # ✅ Lấy Google Sheets client đồng bộ
+    sync_creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    sync_client = gspread.authorize(sync_creds)  # 👉 Dùng gspread đồng bộ
 
+    # ✅ Mở spreadsheet bằng client đồng bộ
+    sheet = sync_client.open_by_key(spreadsheet_id)
 
-async def get_user_sheet(user_id):
-    """Lấy Google Sheet ID của user"""
-    user_sheets = await load_user_sheets()
-    return user_sheets.get(str(user_id), None)
+    # ✅ Lấy worksheet dưới dạng gspread.Worksheet (đồng bộ)
+    real_ws = sheet.worksheet(ws.title)
+
+    # Định nghĩa header
+    headers = [
+        ["Ngày", "Thu", "Chi", "Loại", "Mô tả", "", 
+         "Ngày", "Tiết kiệm", "Loại", "Mô tả", "", 
+         "Mục", "Hạn mức", "Đã chi", "Còn lại"]
+    ]
+    
+    # ✅ Vẫn dùng async để update nội dung
+    await ws.update('A1:O1', headers)
+
+    # Định dạng màu header
+    header_fmt = CellFormat(
+        backgroundColor=Color(0.5, 0.2, 0.6),  # Màu tím
+        textFormat=TextFormat(bold=True, foregroundColor=Color(1, 1, 1)),  # Chữ trắng
+        horizontalAlignment='CENTER'
+    )
+
+    # ✅ Dùng real_ws để format
+    format_cell_range(real_ws, "A1:O1", header_fmt)
+
+    # Căn giữa toàn bộ dữ liệu
+    align_fmt = CellFormat(horizontalAlignment='CENTER')
+    format_cell_range(real_ws, "A:O", align_fmt)
+
+    # Định dạng màu cho từng loại giao dịch
+    fmt_red = CellFormat(backgroundColor=Color(1, 0.6, 0.6))  # Chi tiêu (đỏ nhạt)
+    fmt_green = CellFormat(backgroundColor=Color(0.6, 1, 0.6))  # Tiết kiệm (xanh nhạt)
+
+    # Áp dụng Conditional Formatting
+    apply_conditional_format(real_ws, "C:C", "Chi tiêu", fmt_red)
+    apply_conditional_format(real_ws, "H:H", "Tiết kiệm", fmt_green)
+
+    return ws
+
+def apply_conditional_format(ws, col_range, criteria, cell_format):
+    """Áp dụng định dạng có điều kiện cho một cột dựa trên tiêu chí"""
+    rules = get_conditional_format_rules(ws)
+    rule = ConditionalFormatRule(
+        ranges=[GridRange.from_a1_range(col_range, ws)],
+        booleanRule=BooleanRule(
+            condition=BooleanCondition('TEXT_EQ', [criteria]),
+            format=cell_format
+        )
+    )
+    rules.append(rule)
+    rules.save()  # ✅ Lưu lại rules vào Google Sheets
+
 
 async def get_worksheet(user_id):
     """Lấy worksheet của user"""
