@@ -131,11 +131,19 @@ async def format_month_worksheet(ws, spreadsheet_id):
     sub_header_cols = ["A3:E3", "G3:J3", "L3:O3"]
     for i, header in enumerate(sub_headers):
         await ws.update(sub_header_cols[i], [header])
+        
+# ✅ Căn giữa toàn bộ dữ liệu nhập của người dùng
+    data_align_fmt = CellFormat(
+        textFormat=TextFormat(foregroundColor=Color(0, 0, 0)),  # Font màu đen
+        horizontalAlignment='CENTER',
+        verticalAlignment='MIDDLE'
+    )
+    format_cell_range(real_ws, "A:O", data_align_fmt)
 
     # ✅ Định dạng tiêu đề chính (font 15, in đậm, căn giữa cả ngang & dọc)
     main_header_fmt = CellFormat(
         backgroundColor=Color(0.3, 0.6, 1),  # Màu xanh dương
-        textFormat=TextFormat(bold=True, fontSize=15, foregroundColor=Color(1, 1, 1)),
+        textFormat=TextFormat(bold=True, fontSize=15, foregroundColor=Color(1, 1, 1)),  # Font màu trắng
         horizontalAlignment='CENTER',
         verticalAlignment='MIDDLE'
     )
@@ -146,20 +154,13 @@ async def format_month_worksheet(ws, spreadsheet_id):
     # ✅ Định dạng hàng tiêu đề thứ 2 (font mặc định, căn giữa)
     sub_header_fmt = CellFormat(
         backgroundColor=Color(0.2, 0.2, 0.2),  # Màu xám đậm
-        textFormat=TextFormat(bold=True, foregroundColor=Color(1, 1, 1)),
+        textFormat=TextFormat(bold=True, foregroundColor=Color(1, 1, 1)),  # Font màu trắng
         horizontalAlignment='CENTER',
         verticalAlignment='MIDDLE'
     )
     sub_header_fmt_ranges = ["A3:E3", "G3:J3", "L3:O3"]
     for r in sub_header_fmt_ranges:
         format_cell_range(real_ws, r, sub_header_fmt)
-
-    # ✅ Căn giữa toàn bộ dữ liệu nhập của người dùng
-    data_align_fmt = CellFormat(
-        horizontalAlignment='CENTER',
-        verticalAlignment='MIDDLE'
-    )
-    format_cell_range(real_ws, "A:O", data_align_fmt)
 
     # ✅ Khóa header (không cho chỉnh sửa hàng 1 & 2)
     protect_range(real_ws, "A1:O3")
@@ -168,11 +169,17 @@ async def format_month_worksheet(ws, spreadsheet_id):
     apply_conditional_format(real_ws, "B4:B", ">", "0", Color(0.6, 1, 0.6))  # Thu = Xanh nhạt
     apply_conditional_format(real_ws, "C4:C", "<", "0", Color(1, 0.6, 0.6))  # Chi = Đỏ nhạt
 
+    # ✅ Thay đổi độ rộng của cột E và J
+    set_column_width(real_ws, 'E', 200)
+    set_column_width(real_ws, 'J', 200)
+
     return ws
 
 def protect_range(ws, cell_range):
     """Khóa phạm vi ô để tránh chỉnh sửa"""
     sheet_id = ws.spreadsheet.id
+    owner_email = CREDS.service_account_email  # Email của chủ sở hữu (Service Account)
+
     body = {
         "requests": [
             {
@@ -181,10 +188,13 @@ def protect_range(ws, cell_range):
                         "range": {
                             "sheetId": ws.id,
                             "startRowIndex": 0,  # Hàng 1 (tính từ 0)
-                            "endRowIndex": 2     # Hàng 2 (chặn từ hàng 1-2)
+                            "endRowIndex": 3     # Hàng 3 (chặn từ hàng 1-3)
                         },
                         "description": "Chặn chỉnh sửa header",
-                        "warningOnly": False  # Chặn hoàn toàn, không chỉ cảnh báo
+                        "warningOnly": False,  # Chặn hoàn toàn, không chỉ cảnh báo
+                        "editors": {
+                            "users": [owner_email]  # Chỉ cho phép chủ sở hữu chỉnh sửa
+                        }
                     }
                 }
             }
@@ -192,7 +202,6 @@ def protect_range(ws, cell_range):
     }
 
     # ✅ Thay thế cách lấy Google Sheets API
-    # creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
     service = build("sheets", "v4", credentials=CREDS)
     
     service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
@@ -225,6 +234,15 @@ def apply_conditional_format(ws, col_range, condition, value, color):
     rules.append(rule)
     rules.save()  # Lưu lại rule vào Google Sheets
 
+    # Apply number format with thousand separator
+    apply_number_format(ws, col_range)
+
+def apply_number_format(ws, col_range):
+    """Áp dụng định dạng số với dấu phân cách hàng nghìn"""
+    number_format = CellFormat(
+        numberFormat=NumberFormat(type="NUMBER", pattern="#,##0")
+    )
+    format_cell_range(ws, col_range, number_format)
 
 async def get_worksheet(user_id):
     """Lấy worksheet của user"""
