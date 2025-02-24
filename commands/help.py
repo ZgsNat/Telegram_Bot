@@ -7,7 +7,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category_map = {
         'Default Commands': ['start', 'help'],
         'Categories': ['add_cate', 'delete_cate', 'update_cate', 'list_cate'],
-        'Google Sheets': ['apply_email', 'delete_email', 'list_emails', 'fix_format'],
+        'Google Sheets': ['apply_email', 'delete_email', 'list_emails', 'fix_format', 'apply_edit_header'],
         'Khác': []
     }
 

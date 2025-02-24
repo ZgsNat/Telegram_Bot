@@ -1,4 +1,5 @@
 from turtle import color
+import asyncio
 import gspread_asyncio
 import gspread  # ✅ Import gspread để xử lý exceptions
 from gspread_formatting import *
@@ -10,7 +11,6 @@ from telegram.ext import CallbackContext
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime
-
 
 # Kết nối với Google Sheets API
 SCOPES = [
@@ -106,94 +106,290 @@ async def create_user_sheet(user_id, username="User", year=None):
     return sheet.id
 
 async def format_month_worksheet(ws, spreadsheet_id):
-    """Định dạng worksheet cho một tháng giống như trên ảnh"""
+    """Định dạng worksheet cho một tháng, chỉ gọi tối đa 1 lần API để tránh quá tải"""
 
-    # ✅ Mở Google Sheet và worksheet
-    sheet = sync_client.open_by_key(spreadsheet_id)
-    real_ws = sheet.worksheet(ws.title)
+    # ✅ Kết nối với Google Sheets
+    client = await get_google_client()
+    sheet = await client.open_by_key(spreadsheet_id)
+    real_ws = await sheet.worksheet(ws.title)
+    service_account_email = CREDS.service_account_email  # Email of the service account
+    try:
+        # ✅ Batch: Ghi dữ liệu, merge ô, khóa ô, và định dạng
+        batch_updates = {
+            "requests": [
+                # Ghi dữ liệu
+                {"updateCells": {
+                    "range": a1_to_grid_range("A1:A1", real_ws.id),
+                    "rows": [{"values": [{"userEnteredValue": {"stringValue": "Thu Chi"}}]}],
+                    "fields": "userEnteredValue"
+                }},
+                {"updateCells": {
+                    "range": a1_to_grid_range("G1:G1", real_ws.id),
+                    "rows": [{"values": [{"userEnteredValue": {"stringValue": "Tiết Kiệm"}}]}],
+                    "fields": "userEnteredValue"
+                }},
+                {"updateCells": {
+                    "range": a1_to_grid_range("L1:L1", real_ws.id),
+                    "rows": [{"values": [{"userEnteredValue": {"stringValue": "Hạn mức chi tiêu"}}]}],
+                    "fields": "userEnteredValue"
+                }},
+                {"updateCells": {
+                    "range": a1_to_grid_range("A3:E3", real_ws.id),
+                    "rows": [{"values": [
+                        {"userEnteredValue": {"stringValue": "Ngày"}},
+                        {"userEnteredValue": {"stringValue": "Thu"}},
+                        {"userEnteredValue": {"stringValue": "Chi"}},
+                        {"userEnteredValue": {"stringValue": "Loại"}},
+                        {"userEnteredValue": {"stringValue": "Mô tả"}}
+                    ]}],
+                    "fields": "userEnteredValue"
+                }},
+                {"updateCells": {
+                    "range": a1_to_grid_range("G3:J3", real_ws.id),
+                    "rows": [{"values": [
+                        {"userEnteredValue": {"stringValue": "Ngày"}},
+                        {"userEnteredValue": {"stringValue": "Tiết kiệm"}},
+                        {"userEnteredValue": {"stringValue": "Loại"}},
+                        {"userEnteredValue": {"stringValue": "Mô tả"}}
+                    ]}],
+                    "fields": "userEnteredValue"
+                }},
+                {"updateCells": {
+                    "range": a1_to_grid_range("L3:O3", real_ws.id),
+                    "rows": [{"values": [
+                        {"userEnteredValue": {"stringValue": "Mục"}},
+                        {"userEnteredValue": {"stringValue": "Hạn mức"}},
+                        {"userEnteredValue": {"stringValue": "Đã chi"}},
+                        {"userEnteredValue": {"stringValue": "Còn lại"}}
+                    ]}],
+                    "fields": "userEnteredValue"
+                }},
+                # Merge ô tiêu đề chính
+                {"mergeCells": {"range": a1_to_grid_range("A1:E2", real_ws.id)}},
+                {"mergeCells": {"range": a1_to_grid_range("G1:J2", real_ws.id)}},
+                {"mergeCells": {"range": a1_to_grid_range("L1:O2", real_ws.id)}},
+                # Khóa header (hàng 1-3)
+                {"addProtectedRange": {
+                    "protectedRange": {
+                        "range": a1_to_grid_range("A1:O3", real_ws.id),
+                        "description": "Khóa header",
+                        "warningOnly": False,  # Chặn hoàn toàn, không chỉ cảnh báo
+                        "editors": {
+                            "users": [service_account_email]  # Allow the service account to edit
+                        }
+                    }
+                }},
+                # Định dạng header chính
+                {"repeatCell": {
+                    "range": a1_to_grid_range("A1:E2", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.3, "green": 0.6, "blue": 1},
+                        "textFormat": {"bold": True, "fontSize": 15, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("G1:J2", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.3, "green": 0.6, "blue": 1},
+                        "textFormat": {"bold": True, "fontSize": 15, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("L1:O2", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.3, "green": 0.6, "blue": 1},
+                        "textFormat": {"bold": True, "fontSize": 15, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                # Định dạng header phụ
+                {"repeatCell": {
+                    "range": a1_to_grid_range("A3:E3", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                        "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("G3:J3", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                        "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("L3:O3", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                        "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                # Định dạng dữ liệu người dùng nhập
+                {"repeatCell": {
+                    "range": a1_to_grid_range("A4:O500", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}},
+                        "horizontalAlignment": 'CENTER',
+                        "verticalAlignment": 'MIDDLE'
+                    }},
+                    "fields": "userEnteredFormat(textFormat,horizontalAlignment,verticalAlignment)"
+                }},
+                # Định dạng số với dấu phân cách hàng nghìn
+                {"repeatCell": {
+                    "range": a1_to_grid_range("B4:B500", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                    }},
+                    "fields": "userEnteredFormat(numberFormat)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("C4:C500", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                    }},
+                    "fields": "userEnteredFormat(numberFormat)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("M4:M500", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                    }},
+                    "fields": "userEnteredFormat(numberFormat)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("N4:N500", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                    }},
+                    "fields": "userEnteredFormat(numberFormat)"
+                }},
+                {"repeatCell": {
+                    "range": a1_to_grid_range("O4:O500", real_ws.id),
+                    "cell": {"userEnteredFormat": {
+                        "numberFormat": {"type": "NUMBER", "pattern": "#,##0"}
+                    }},
+                    "fields": "userEnteredFormat(numberFormat)"
+                }},
+                # Định dạng có điều kiện (Xanh: Thu, Đỏ: Chi)
+                {"addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [a1_to_grid_range("B4:B500", real_ws.id)],
+                        "booleanRule": {
+                            "condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "0"}]},
+                            "format": {"backgroundColor": {"red": 0.6, "green": 1, "blue": 0.6}}
+                        }
+                    },
+                    "index": 0
+                }},
+                {"addConditionalFormatRule": {
+                    "rule": {
+                        "ranges": [a1_to_grid_range("C4:C500", real_ws.id)],
+                        "booleanRule": {
+                            "condition": {"type": "NUMBER_LESS", "values": [{"userEnteredValue": "0"}]},
+                            "format": {"backgroundColor": {"red": 1, "green": 0.6, "blue": 0.6}}
+                        }
+                    },
+                    "index": 0
+                }}
+            ]
+        }
 
-    # ✅ Xóa toàn bộ nội dung trước khi ghi
-    await ws.batch_clear(["A1:O2"])
+        service = build("sheets", "v4", credentials=CREDS)
+        response = await asyncio.to_thread(service.spreadsheets().batchUpdate, spreadsheetId=spreadsheet_id, body=batch_updates)
+        response = response.execute()  # Chạy trong luồng riêng để không block event loop
 
-    # ✅ Ghi header chính vào các ô cần thiết
-    await ws.update("A1", [["Thu Chi"]])
-    await ws.update("G1", [["Tiết Kiệm"]])
-    await ws.update("L1", [["Hạn mức chi tiêu"]])
+        return ws
 
-    # ✅ Merge các ô header chính
-    merge_ranges = ["A1:E2", "G1:J2", "L1:O2"]
-    for r in merge_ranges:
-        real_ws.merge_cells(r)
-    
-    sub_headers = [["Ngày", "Thu", "Chi", "Loại", "Mô tả"],
-                   ["Ngày", "Tiết kiệm", "Loại", "Mô tả"],
-                   ["Mục", "Hạn mức", "Đã chi", "Còn lại"]]
-    sub_header_cols = ["A3:E3", "G3:J3", "L3:O3"]
-    for i, header in enumerate(sub_headers):
-        await ws.update(sub_header_cols[i], [header])
-        
-# ✅ Căn giữa toàn bộ dữ liệu nhập của người dùng
-    data_align_fmt = CellFormat(
-        textFormat=TextFormat(foregroundColor=Color(0, 0, 0)),  # Font màu đen
-        horizontalAlignment='CENTER',
-        verticalAlignment='MIDDLE'
-    )
-    format_cell_range(real_ws, "A:O", data_align_fmt)
+    except Exception as e:
+        print(f"Error in format_month_worksheet: {e}")
+        raise
 
-    # ✅ Định dạng tiêu đề chính (font 15, in đậm, căn giữa cả ngang & dọc)
-    main_header_fmt = CellFormat(
-        backgroundColor=Color(0.3, 0.6, 1),  # Màu xanh dương
-        textFormat=TextFormat(bold=True, fontSize=15, foregroundColor=Color(1, 1, 1)),  # Font màu trắng
-        horizontalAlignment='CENTER',
-        verticalAlignment='MIDDLE'
-    )
-    main_header_fmt_ranges = ["A1:E2", "G1:J2", "L1:O2"]
-    for r in main_header_fmt_ranges:
-        format_cell_range(real_ws, r, main_header_fmt)
+async def remove_all_protected_ranges(ws):
+    """Xóa toàn bộ các vùng bảo vệ trên sheet hiện tại."""
+    service = build("sheets", "v4", credentials=CREDS)
+    sheet_id = ws.spreadsheet.id
+    sheet_name = ws.title  # Lấy tên sheet để debug
 
-    # ✅ Định dạng hàng tiêu đề thứ 2 (font mặc định, căn giữa)
-    sub_header_fmt = CellFormat(
-        backgroundColor=Color(0.2, 0.2, 0.2),  # Màu xám đậm
-        textFormat=TextFormat(bold=True, foregroundColor=Color(1, 1, 1)),  # Font màu trắng
-        horizontalAlignment='CENTER',
-        verticalAlignment='MIDDLE'
-    )
-    sub_header_fmt_ranges = ["A3:E3", "G3:J3", "L3:O3"]
-    for r in sub_header_fmt_ranges:
-        format_cell_range(real_ws, r, sub_header_fmt)
+    # Lấy danh sách tất cả các vùng bảo vệ
+    try:
+        response = await asyncio.to_thread(
+            lambda: service.spreadsheets().get(spreadsheetId=sheet_id, fields="sheets(protectedRanges,properties)").execute()
+        )
+    except Exception as e:
+        return f"⚠ Lỗi khi lấy danh sách vùng bảo vệ trên {sheet_name}: {e}"
 
-    # ✅ Khóa header (không cho chỉnh sửa hàng 1 & 2)
-    protect_range(real_ws, "A1:O3")
+    # Debug: In ra response để xem API có trả đúng dữ liệu không
+    # print(f"📜 Response từ Google Sheets API: {response}")
 
-    # ✅ Định dạng có điều kiện (Xanh: Thu, Đỏ: Chi)
-    apply_conditional_format(real_ws, "B4:B", ">", "0", Color(0.6, 1, 0.6))  # Thu = Xanh nhạt
-    apply_conditional_format(real_ws, "C4:C", "<", "0", Color(1, 0.6, 0.6))  # Chi = Đỏ nhạt
+    # Tìm danh sách protectedRanges của sheet hiện tại
+    protected_ranges = []
+    for sheet in response.get("sheets", []):
+        sheet_properties = sheet.get("properties", {})
+        if sheet_properties.get("sheetId") == ws.id and "protectedRanges" in sheet:
+            protected_ranges = sheet["protectedRanges"]
+            break  # Tìm thấy sheet phù hợp thì thoát vòng lặp
 
-    # ✅ Thay đổi độ rộng của cột E và J
-    set_column_width(real_ws, 'E', 200)
-    set_column_width(real_ws, 'J', 200)
+    if not protected_ranges:
+        return f"🟢 Không có vùng bảo vệ nào trên {sheet_name} để xóa."
 
-    return ws
+    # Xây dựng request để xóa từng protectedRange
+    requests = [
+        {"deleteProtectedRange": {"protectedRangeId": pr["protectedRangeId"]}}
+        for pr in protected_ranges
+    ]
 
-def protect_range(ws, cell_range):
-    """Khóa phạm vi ô để tránh chỉnh sửa"""
+    # Gửi request xóa
+    try:
+        await asyncio.to_thread(
+            lambda: service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body={"requests": requests}).execute()
+        )
+        return f"🗑 Đã xóa {len(protected_ranges)} vùng bảo vệ trên {sheet_name}."
+    except Exception as e:
+        return f"⚠ Lỗi khi xóa vùng bảo vệ trên {sheet_name}: {e}"
+
+
+async def protect_range(ws, cell_range):
+    """Khóa phạm vi ô để tránh chỉnh sửa (Async)"""
     sheet_id = ws.spreadsheet.id
     owner_email = CREDS.service_account_email  # Email của chủ sở hữu (Service Account)
 
+    # Lấy danh sách các email có quyền chỉnh sửa
+    service = build("drive", "v3", credentials=CREDS)
+    permissions = await asyncio.to_thread(service.permissions().list, fileId=sheet_id, fields="permissions(emailAddress, role)")
+    permissions = permissions.execute()  # Chạy trong luồng riêng tránh block
+
+    editors = [perm['emailAddress'] for perm in permissions.get('permissions', []) if perm['role'] == 'writer']
+
+    # Convert A1 notation to grid range
+    grid_range = a1_to_grid_range(cell_range, ws.id)
+    
     body = {
         "requests": [
             {
                 "addProtectedRange": {
                     "protectedRange": {
-                        "range": {
-                            "sheetId": ws.id,
-                            "startRowIndex": 0,  # Hàng 1 (tính từ 0)
-                            "endRowIndex": 3     # Hàng 3 (chặn từ hàng 1-3)
-                        },
+                        "range": grid_range,  # Use the converted grid range
                         "description": "Chặn chỉnh sửa header",
                         "warningOnly": False,  # Chặn hoàn toàn, không chỉ cảnh báo
                         "editors": {
-                            "users": [owner_email]  # Chỉ cho phép chủ sở hữu chỉnh sửa
+                            "users": editors  # Cho phép tất cả các email có quyền chỉnh sửa
                         }
                     }
                 }
@@ -204,8 +400,19 @@ def protect_range(ws, cell_range):
     # ✅ Thay thế cách lấy Google Sheets API
     service = build("sheets", "v4", credentials=CREDS)
     
-    service.spreadsheets().batchUpdate(spreadsheetId=sheet_id, body=body).execute()
+    response = await asyncio.to_thread(service.spreadsheets().batchUpdate, spreadsheetId=sheet_id, body=body)
+    response = response.execute()  # Chạy trong luồng riêng để không block event loop
 
+    return response  # Trả về kết quả từ API (hoặc return True nếu không cần)
+
+def a1_to_grid_range(a1_range, sheet_id):
+    """
+    Convert A1 notation to GridRange object for Google Sheets API.
+    """
+    from gspread.utils import a1_range_to_grid_range
+    grid_range = a1_range_to_grid_range(a1_range)
+    grid_range['sheetId'] = sheet_id
+    return grid_range
 
 def apply_conditional_format(ws, col_range, condition, value, color):
     """Áp dụng định dạng có điều kiện (bắt đầu từ dòng 3, không format header)"""
@@ -223,9 +430,12 @@ def apply_conditional_format(ws, col_range, condition, value, color):
     if condition not in condition_map:
         raise ValueError(f"Điều kiện không hợp lệ: {condition}")
 
+    # Convert A1 notation to grid range
+    grid_range = a1_to_grid_range(col_range, ws.id)
+
     rules = get_conditional_format_rules(ws)
     rule = ConditionalFormatRule(
-        ranges=[GridRange.from_a1_range(col_range, ws)],
+        ranges=[grid_range],  # Use the converted grid range
         booleanRule=BooleanRule(
             condition=BooleanCondition(condition_map[condition], [value]),
             format=CellFormat(backgroundColor=color)
@@ -239,10 +449,22 @@ def apply_conditional_format(ws, col_range, condition, value, color):
 
 def apply_number_format(ws, col_range):
     """Áp dụng định dạng số với dấu phân cách hàng nghìn"""
+    # Convert A1 notation to grid range
+    grid_range = a1_to_grid_range(col_range, ws.id)
+
     number_format = CellFormat(
         numberFormat=NumberFormat(type="NUMBER", pattern="#,##0")
     )
-    format_cell_range(ws, col_range, number_format)
+    format_cell_range(ws, grid_range, number_format)  # Use the converted grid range
+
+async def create_or_get_worksheet(spreadsheet_id, title):
+    """Tạo hoặc lấy worksheet theo tiêu đề"""
+    sheet = sync_client.open_by_key(spreadsheet_id)
+    try:
+        ws = sheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sheet.add_worksheet(title=title, rows="100", cols="20")
+    return ws
 
 async def get_worksheet(user_id):
     """Lấy worksheet của user"""

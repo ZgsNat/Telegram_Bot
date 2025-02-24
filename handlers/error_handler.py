@@ -15,6 +15,9 @@ class ErrorHandler(BaseHandler):
         except Exception as e:
             logging.error(f"An error occurred: {e}")
 
+    async def __call__(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.handle_update(update, context)
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.error(f"An error occurred: {context.error}")
     if update and update.message:
